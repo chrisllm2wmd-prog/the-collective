@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#154530">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="CEO Sim">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#164a30">
 <title>CEO SIMULATOR</title>
@@ -20,6 +25,12 @@ h2{margin:0;font:700 12px Georgia,serif;letter-spacing:.18em;color:var(--cream)}
 
 /* alert effects */
 #fx{position:fixed;inset:0;pointer-events:none;z-index:60;transition:box-shadow .6s}
+/* reduce flashing (Settings): no pulsing, shaking, strobing or full-screen colour flips */
+body.rm #fx,body.rm #view,body.rm .gflash,body.rm .trow.ready,body.rm .row.can,body.rm .bigbtn.can,body.rm #ladder i.bld,body.rm #ticker.new,body.rm #nav button.att,body.rm .dh,
+body.rm #result,body.rm #result .arrow,body.rm #seq .alb,body.rm #seq #tOut,body.rm .tcur.blink{animation:none!important}
+body.rm #doomFlash,body.rm #tFlash{display:none!important}
+body.rm #seq .alw.glitchout{animation:fadeo 1.4s forwards}
+@keyframes fadeo{to{opacity:0}}
 body[data-alert="1"] #fx{box-shadow:inset 0 0 60px rgba(224,162,27,.4)}
 body[data-alert="2"] #fx{box-shadow:inset 0 0 100px rgba(224,102,27,.55);animation:pulse 1.6s infinite}
 body[data-alert="3"] #fx{box-shadow:inset 0 0 140px rgba(200,49,43,.8);animation:pulse .7s infinite}
@@ -584,6 +595,13 @@ const IMG = {
 
 /* ============================== CONFIG ============================== */
 const SAVE_KEY = 'collective.save.v3';
+const TESTMODE = /[?&]test\b/.test(location.search);                      // the test tools only show with ?test in the web address
+const SETKEY = 'collective.settings';
+let SET = {reduce:false, warned:false};
+try { Object.assign(SET, JSON.parse(localStorage.getItem(SETKEY) || '{}')); } catch(e){}
+const saveSet = () => { try { localStorage.setItem(SETKEY, JSON.stringify(SET)); } catch(e){} };
+const applySet = () => document.body.classList.toggle('rm', !!SET.reduce);
+let NOSAVE = false;                                                        // set while importing a save, so the page does not overwrite it on the way out
 const LATE_AT = 5e8;
 const M = 1e5;                                    // money scale: start purse is $1M
 const START_CASH = 10 * M;
@@ -3468,8 +3486,43 @@ function ladderSheet(){
 function menuSheet(){
   openModal('MENU', `<div class="menu">
       <button data-act="how">How it works</button><button data-act="skills">Skills &amp; ratings (${META.skillPts} point${META.skillPts === 1 ? '' : 's'})</button><button data-act="stats">Statistics</button><button data-act="timeline">Run timeline</button><button data-act="log">Event log</button><button data-act="ceo">Your CEO</button><button data-act="codex">Codex</button>
-      <button data-act="sound">Sound: ${AU.mute ? 'OFF' : 'ON'}</button><button data-act="board">Sound board</button><button data-act="switch">Switch CEO (starts a new run)</button><button data-act="save">Save now</button><button data-act="test">Test tools</button><button data-act="reset">Hard reset</button>
+      <button data-act="settings">Settings</button><button data-act="sound">Sound: ${AU.mute ? 'OFF' : 'ON'}</button><button data-act="board">Sound board</button><button data-act="switch">Switch CEO (starts a new run)</button><button data-act="save">Save now</button>${TESTMODE ? '<button data-act="test">Test tools</button>' : ''}<button data-act="reset">Hard reset</button>
       <p class="mute" style="font-size:11px">Satire. Quotes and events come from the public record as collected on llm2wmd.com. Perks, penalties and numbers are game mechanics, not claims of fact.</p></div>`);
+}
+const b64enc = s => btoa(unescape(encodeURIComponent(s))), b64dec = s => decodeURIComponent(escape(atob(s)));
+function settingsSheet(){
+  openModal('SETTINGS', `<div class="menu">
+      <button data-set="sound">Sound: ${AU.mute ? 'OFF' : 'ON'}</button>
+      <button data-set="reduce">Reduce flashing: ${SET.reduce ? 'ON' : 'OFF'}</button>
+      <button data-set="export">Save code: copy or back up</button><button data-set="import">Save code: load</button>
+      <button data-set="warn">Show the flashing warning again</button><button data-set="reset">Hard reset</button></div>
+    <p class="mute" style="font-size:11px">Reduce flashing turns off strobing, shaking, pulsing and the full-screen colour flashes, including in the AGI and terminal endings. <a href="privacy.html" target="_blank">Privacy policy</a>: the game collects nothing.</p>`, [{label:'Close'}]);
+}
+function settingsClick(b){
+    ({ sound:() => { auSetMute(!AU.mute); settingsSheet(); },
+       reduce:() => { SET.reduce = !SET.reduce; saveSet(); applySet(); settingsSheet(); },
+       export:exportSheet, import:importSheet, warn:flashWarning,
+       reset:() => openModal('HARD RESET', '<p>Wipe everything, including the codex?</p>', [{label:'Cancel'}, {label:'Wipe', cls:'primary', fn:() => { try { localStorage.removeItem(SAVE_KEY); } catch(x){} S = freshRun(); META = newMeta(); resetUiState(); init(false); }}])
+    }[b.dataset.set] || (() => {}))();
+}
+function exportSheet(){
+  save(); let code = ''; try { code = b64enc(localStorage.getItem(SAVE_KEY) || ''); } catch(e){}
+  openModal('SAVE CODE', `<p>Copy this code and keep it somewhere safe (a note, an email to yourself). To restore, use <b>Save code: load</b> on any device.</p>
+    <textarea id="codeBox" readonly style="width:100%;height:120px;font:11px monospace;-webkit-user-select:text;user-select:text">${code}</textarea>`,
+    [{label:'Back', fn:settingsSheet}, {label:'Copy', cls:'primary', close:false, fn:() => { const b = $('codeBox'); b.select(); try { navigator.clipboard.writeText(b.value); } catch(e){ document.execCommand('copy'); } }}]);
+}
+function importSheet(){
+  openModal('LOAD SAVE CODE', `<p>Paste a save code here. This replaces the game on this device.</p>
+    <textarea id="codeBox" style="width:100%;height:120px;font:11px monospace;-webkit-user-select:text;user-select:text"></textarea><p id="codeMsg" class="mute"></p>`,
+    [{label:'Back', fn:settingsSheet}, {label:'Load', cls:'primary', close:false, fn:() => {
+      try { const raw = b64dec($('codeBox').value.trim()), d = JSON.parse(raw); if (!d || !d.S || !d.META) throw 0;
+        NOSAVE = true; localStorage.setItem(SAVE_KEY, raw); location.reload(); }
+      catch(e){ NOSAVE = false; $('codeMsg').textContent = 'That code did not work. Copy the whole code and try again.'; } }}]);
+}
+function flashWarning(){
+  openModal('FLASHING LIGHTS', `<p><b>Warning:</b> this game has flashing lights, strong colour changes, shaking and loud sounds, including a long full-screen flashing sequence near the end of a run. It may not be suitable for people who are sensitive to flashing lights.</p>
+    <p>You can change this at any time in MENU &gt; Settings.</p>`,
+    [{label:'Reduce flashing', cls:'primary', fn:() => { SET.reduce = true; SET.warned = true; saveSet(); applySet(); }}, {label:'Continue as normal', fn:() => { SET.reduce = false; SET.warned = true; saveSet(); applySet(); }}]);
 }
 function howSheet(){
   openModal('HOW IT WORKS', `<div class="howto">
@@ -3552,11 +3605,12 @@ function buildUI(){
   $('mClose').onclick = closeModal;
   $('modal').onclick = e => { if (e.target === $('modal')) closeModal(); };
   $('mBody').onclick = e => {
+    const st = e.target.closest('[data-set]'); if (st){ settingsClick(st); return; }
     const sb = e.target.closest('[data-snd]'); if (sb){ soundBoardPlay(sb.dataset.snd); return; }
     const sk = e.target.closest('[data-skill]'); if (sk){ buySkill(sk.dataset.skill); return; }
     const ts = e.target.closest('[data-test]'); if (ts){ runTest(ts.dataset.test); return; }
     const b = e.target.closest('[data-act]'); if (!b) return;
-    ({how:howSheet, timeline:timelineSheet, log:logSheet, ceo:() => S.ceo && ceoSheet(CM[S.ceo], false), codex:codexSheet, skills:skillsSheet, stats:statsSheet, test:testSheet,
+    ({settings:settingsSheet, how:howSheet, timeline:timelineSheet, log:logSheet, ceo:() => S.ceo && ceoSheet(CM[S.ceo], false), codex:codexSheet, skills:skillsSheet, stats:statsSheet, test:testSheet,
       switch:() => openModal('SWITCH CEO', '<p>Start a new run with a different CEO? This run is lost.</p>',
         [{label:'Cancel'}, {label:'Switch', cls:'primary', fn:() => { S = freshRun(); S.log = []; resetUiState(); showPick(); save(); }}]),
       sound:() => { auSetMute(!AU.mute); menuSheet(); }, board:soundBoardSheet,
@@ -4336,7 +4390,7 @@ function soundBoardPlay(id){
 }
 
 /* ================================ SAVE ============================== */
-function save(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify({v:3, t:Date.now(), S, META})); } catch(e){} }
+function save(){ if (NOSAVE) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify({v:3, t:Date.now(), S, META})); } catch(e){} }
 function load(){
   let raw = null;
   try {
@@ -4386,7 +4440,7 @@ function startGame(){
   if (!S.ceo && !S.over) showPick();
   else if (pendingWelcome && !S.over && !S.agiSeq){ welcomeSheet(pendingWelcome); pendingWelcome = null; }
 }
-buildUI(); init(true); render(); auBind();
+buildUI(); init(true); render(); auBind(); applySet(); if (!SET.warned) flashWarning();
 let last = Date.now(), lastSave = Date.now();
 setInterval(() => {
   try {
@@ -4401,6 +4455,7 @@ setInterval(() => {
   } catch(e){ window.__tickErrors = (window.__tickErrors || 0) + 1; if (window.__tickErrors < 20) console.error('tick error', e); }
 }, 100);
 addEventListener('beforeunload', save);
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 window.G = {get S(){return S}, get META(){return META}, calc, step, act, collect, build, siteBuy, labBuy, fileS1, ipoScore, fmt, setTab, pickCeo, resolveDeal, resolveStunt, callPress, acceptRound, closeResult, unlocked, guide};
 </script>

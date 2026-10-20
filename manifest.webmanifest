@@ -1,0 +1,16 @@
+{
+  "name": "CEO Simulator: LLM2WMD",
+  "short_name": "CEO Sim",
+  "description": "A satirical idle game about AI-lab CEOs. Build a LLM, reach AGI, or destroy us all.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#154530",
+  "theme_color": "#154530",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
